@@ -1,6 +1,6 @@
 /* 勤務記録 Service Worker
    アプリを更新したら VERSION を変えてください（index.html の APP_VERSION も合わせる）。 */
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = 'kinmu-' + VERSION;
 const ASSETS = [
   './',
