@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<meta name="description" content="毎日の勤務時間・件数・体調を記録して、月ごとに集計・Excel出力できるアプリ">
+<title>勤務記録</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="勤務記録">
+<!-- Excel(.xlsx)出力用ライブラリ（同じフォルダに同梱）。読み込めない場合はCSV出力に自動で切り替わります -->
+<script src="./exceljs.min.js" defer></script>
+<style>
+:root{--pri:#2563eb;--pri-d:#1d4ed8;--bg:#f3f5f9;--card:#fff;--txt:#1f2937;--sub:#6b7280;--line:#e5e7eb;--red:#dc2626;--ok:#16a34a;--warn:#d97706}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Noto Sans CJK JP",Meiryo,sans-serif;background:var(--bg);color:var(--txt);font-size:16px;line-height:1.5;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+header{background:var(--pri);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 12px 10px 16px;position:sticky;top:0;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:space-between}
+header .hbtn{min-height:44px;min-width:44px;border:1.5px solid rgba(255,255,255,.6);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;font-size:14px;font-weight:700;padding:0 14px;cursor:pointer;font-family:inherit}
+.update{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));background:#111827;color:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.update[hidden]{display:none}.update span{flex:1;font-size:15px;font-weight:600}
+.update button{min-height:44px;border:none;border-radius:10px;padding:0 14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.update .go{background:#fbbf24;color:#111827}.update .later{background:transparent;color:#d1d5db}
+.help ol{padding-left:22px;margin:6px 0 4px}.help li{margin:4px 0}.help h3{font-size:15px;margin:14px 0 4px}
+.help .os{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px}
+.help .ok{color:var(--ok);font-weight:700}
+
+header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.05em}
+main{max-width:640px;margin:0 auto;padding:12px}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card h2{font-size:17px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between}
+label{display:block;font-size:14px;color:var(--sub);margin:12px 0 4px;font-weight:600}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;font-size:17px;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--txt);min-height:50px;font-family:inherit;-webkit-appearance:none;appearance:none}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.row{display:flex;gap:10px}.row>div{flex:1;min-width:0}
+.calc{margin-top:14px;background:#eff6ff;border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px}
+.calc .big{font-size:26px;font-weight:700;color:var(--pri-d)}
+.calc .note{font-size:13px;color:var(--sub)}
+.calc.err{background:#fef2f2}.calc.err .big{color:var(--red);font-size:16px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;min-height:50px;border:1.5px solid var(--line);background:#fff;border-radius:10px;font-size:16px;font-weight:600;color:var(--sub);cursor:pointer}
+.seg button.on[data-v="良好"]{background:#dcfce7;border-color:var(--ok);color:#166534}
+.seg button.on[data-v="普通"]{background:#e0e7ff;border-color:var(--pri);color:#1e3a8a}
+.seg button.on[data-v="不調"]{background:#fee2e2;border-color:var(--red);color:#991b1b}
+.btn{display:block;width:100%;min-height:54px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin-top:14px;font-family:inherit}
+.btn.pri{background:var(--pri);color:#fff}.btn.pri:active{background:var(--pri-d)}
+.btn.sec{background:#fff;color:var(--pri);border:1.5px solid var(--pri)}
+.btn.ghost{background:#f3f4f6;color:var(--txt)}
+.btn.danger{background:#fff;color:var(--red);border:1.5px solid #fca5a5}
+.btns2{display:flex;gap:10px}.btns2 .btn{flex:1}
+.month-bar{display:flex;gap:8px;align-items:center}
+.month-bar button{min-width:50px;min-height:50px;border:1.5px solid var(--line);background:#fff;border-radius:10px;font-size:20px;cursor:pointer;color:var(--pri)}
+.month-bar input{flex:1;text-align:center;font-weight:700}
+.rec{border-bottom:1px solid var(--line);padding:12px 0;display:flex;gap:10px;align-items:flex-start}
+.rec:last-child{border-bottom:none}
+.rec .d{min-width:54px;text-align:center;background:#f3f4f6;border-radius:10px;padding:6px 4px;font-weight:700;line-height:1.2}
+.rec .d small{display:block;font-size:12px;color:var(--sub);font-weight:600}
+.rec .d.sun small{color:var(--red)}.rec .d.sat small{color:var(--pri)}
+.rec .b{flex:1;min-width:0}
+.rec .site{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.rec .meta{font-size:14px;color:var(--sub)}
+.rec .memo{font-size:14px;margin-top:2px;overflow-wrap:anywhere;white-space:pre-wrap}
+.rec .acts{display:flex;flex-direction:column;gap:6px}
+.rec .acts button{min-width:64px;min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.rec .acts .del{color:var(--red);border-color:#fecaca}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:4px;vertical-align:1px}
+.tag.良好{background:#dcfce7;color:#166534}.tag.普通{background:#e0e7ff;color:#1e3a8a}.tag.不調{background:#fee2e2;color:#991b1b}
+.tag.night{background:#fef3c7;color:#92400e}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat .k{font-size:13px;color:var(--sub);font-weight:600}
+.stat .v{font-size:24px;font-weight:800;color:var(--pri-d)}
+.stat .v small{font-size:13px;color:var(--sub);font-weight:600;margin-left:2px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:10px 6px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{font-size:13px;color:var(--sub);background:#f8fafc}
+tfoot td{font-weight:800;border-top:2px solid var(--txt)}
+.empty{color:var(--sub);text-align:center;padding:24px 0}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;min-height:64px;border:none;background:none;font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;font-family:inherit}
+nav.tabs button .ic{display:block;font-size:22px;line-height:1.1}
+nav.tabs button.on{color:var(--pri)}
+.view{display:none}.view.on{display:block}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 18px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;max-width:90%;text-align:center}
+.toast.show{opacity:1}
+.editing{border:2px solid var(--warn)}
+.edit-badge{font-size:13px;background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px}
+.hint{font-size:13px;color:var(--sub);margin:6px 0 0}
+#printArea{display:none}
+@media print{
+  body{background:#fff;padding:0;font-size:11pt}
+  header,nav.tabs,main,.toast{display:none!important}
+  #printArea{display:block;padding:0 4mm}
+  #printArea h1{font-size:18pt;margin:0 0 4mm;border-bottom:2px solid #000;padding-bottom:2mm}
+  #printArea h2{font-size:13pt;margin:6mm 0 2mm}
+  #printArea table{font-size:10pt}
+  #printArea th,#printArea td{padding:4px 5px;border:1px solid #999}
+  #printArea th{background:#eee;color:#000}
+  #printArea .dt td:nth-child(2),#printArea .dt th:nth-child(2){text-align:left}
+  #printArea .pstats{display:flex;gap:4mm;flex-wrap:wrap}
+  #printArea .pstats div{border:1px solid #999;padding:2mm 4mm;min-width:38mm}
+  #printArea .pstats b{display:block;font-size:15pt}
+  #printArea .foot{margin-top:6mm;font-size:9pt;color:#555}
+  tr{page-break-inside:avoid}
+  @page{size:A4;margin:12mm}
+}
+</style>
+</head>
+<body>
+<header><h1>📋 勤務記録</h1><button type="button" class="hbtn" id="helpBtn" aria-label="使い方">？ 使い方</button></header>
+<main>
+<!-- 入力 -->
+<section class="view on" id="v-input">
+  <div class="card" id="formCard">
+    <h2><span id="formTitle">勤務を記録する</span><span class="edit-badge" id="editBadge" hidden>編集中</span></h2>
+    <form id="f" autocomplete="off">
+      <label for="date">日付</label>
+      <input type="date" id="date" required>
+      <label for="site">現場名</label>
+      <input type="text" id="site" list="siteList" placeholder="例：○○ビル" required>
+      <datalist id="siteList"></datalist>
+      <div class="row">
+        <div><label for="start">開始時刻</label><input type="time" id="start" required></div>
+        <div><label for="end">終了時刻</label><input type="time" id="end" required></div>
+      </div>
+      <div class="row">
+        <div><label for="brk">休憩（分）</label><input type="number" id="brk" inputmode="numeric" min="0" step="5" value="60"></div>
+        <div><label for="count">件数</label><input type="number" id="count" inputmode="numeric" min="0" step="1" value="0"></div>
+      </div>
+      <div class="calc" id="calc"><span class="note">実働時間</span><span class="big" id="calcVal">--:--</span><span class="note" id="calcNote"></span></div>
+      <label>体調</label>
+      <div class="seg" id="cond">
+        <button type="button" data-v="良好">😊 良好</button>
+        <button type="button" data-v="普通" class="on">🙂 普通</button>
+        <button type="button" data-v="不調">😣 不調</button>
+      </div>
+      <label for="memo">メモ</label>
+      <textarea id="memo" placeholder="体調や作業内容など（任意）"></textarea>
+      <button type="submit" class="btn pri" id="saveBtn">保存する</button>
+      <button type="button" class="btn ghost" id="cancelBtn" hidden>編集をやめる</button>
+    </form>
+  </div>
+</section>
+
+<!-- 一覧 -->
+<section class="view" id="v-list">
+  <div class="card">
+    <div class="month-bar"><button type="button" class="mprev" aria-label="前の月">‹</button><input type="month" class="mpick"><button type="button" class="mnext" aria-label="次の月">›</button></div>
+  </div>
+  <div class="card"><h2><span>記録一覧</span><span class="meta" id="listCount" style="font-size:14px;color:var(--sub)"></span></h2><div id="list"></div></div>
+</section>
+
+<!-- 集計 -->
+<section class="view" id="v-sum">
+  <div class="card">
+    <div class="month-bar"><button type="button" class="mprev" aria-label="前の月">‹</button><input type="month" class="mpick"><button type="button" class="mnext" aria-label="次の月">›</button></div>
+  </div>
+  <div class="card">
+    <h2 id="sumTitle">月次集計</h2>
+    <div class="stats">
+      <div class="stat"><div class="k">出勤日数</div><div class="v" id="sDays">0<small>日</small></div></div>
+      <div class="stat"><div class="k">総実働時間</div><div class="v" id="sHours">0:00</div><div class="k" id="sHoursDec"></div></div>
+      <div class="stat"><div class="k">総件数</div><div class="v" id="sCount">0<small>件</small></div></div>
+      <div class="stat"><div class="k">平均実働 / 日</div><div class="v" id="sAvg">0:00</div><div class="k" id="sAvgDec"></div></div>
+    </div>
+    <div class="hint" id="sCond"></div>
+  </div>
+  <div class="card">
+    <h2>現場別</h2>
+    <div id="siteTable"></div>
+  </div>
+  <div class="card">
+    <h2>出力</h2>
+    <button type="button" class="btn pri" id="xlsxBtn">📊 Excelで出力</button>
+    <button type="button" class="btn sec" id="printBtn">🖨️ 印刷用表示（PDF保存も可）</button>
+    <p class="hint" id="libStatus"></p>
+  </div>
+  <div class="card">
+    <h2>バックアップ</h2>
+    <p class="hint" style="margin-top:0">データはこの端末のブラウザ内だけに保存されています。機種変更やブラウザのデータ削除に備えて、ときどきバックアップを保存してください。</p>
+    <div class="btns2">
+      <button type="button" class="btn sec" id="expBtn">保存（書き出し）</button>
+      <button type="button" class="btn sec" id="impBtn">復元（読み込み）</button>
+    </div>
+    <input type="file" id="impFile" accept=".json,application/json" hidden>
+  </div>
+</section>
+
+<!-- 使い方 -->
+<section class="view" id="v-help">
+  <div class="card help">
+    <h2>📲 ホーム画面に追加する</h2>
+    <p class="hint" style="margin-top:0">ホーム画面に追加すると、アプリのように全画面で開けて、電波がなくても使えます。</p>
+    <p class="ok" id="standaloneMsg" hidden>✅ いまはホーム画面のアプリとして開いています。</p>
+    <button type="button" class="btn pri" id="installBtn" hidden>アプリをインストール</button>
+    <div class="os">
+      <h3 style="margin-top:0">iPhone（Safari）</h3>
+      <ol>
+        <li>このページを <b>Safari</b> で開く</li>
+        <li>画面下の <b>共有ボタン</b>（□に↑のマーク）をタップ</li>
+        <li>メニューを下にスクロールして <b>「ホーム画面に追加」</b> をタップ</li>
+        <li>右上の <b>「追加」</b> をタップ</li>
+      </ol>
+      <p class="hint">※LINEなどのアプリ内ブラウザでは追加できません。右下のメニューから「Safariで開く」を選んでください。</p>
+    </div>
+    <div class="os">
+      <h3 style="margin-top:0">Android（Chrome）</h3>
+      <ol>
+        <li>このページを <b>Chrome</b> で開く</li>
+        <li>右上の <b>︙（メニュー）</b> をタップ</li>
+        <li><b>「アプリをインストール」</b> または <b>「ホーム画面に追加」</b> をタップ</li>
+        <li>確認画面で <b>「インストール」</b>（または「追加」）をタップ</li>
+      </ol>
+    </div>
+  </div>
+  <div class="card help">
+    <h2>💾 データについて</h2>
+    <p class="hint" style="margin-top:0">記録はこのスマホの中だけに保存され、外部には送信されません。ほかの人と共有されることもありません。</p>
+    <ul class="hint" style="padding-left:20px">
+      <li>ブラウザの「履歴・データを消去」をすると記録も消えます。</li>
+      <li>Safariで使った記録と、ホーム画面のアプリで使った記録は別々になる場合があります（iPhone）。追加した後はホーム画面のアプリから使ってください。</li>
+      <li>機種変更の前には「集計・出力」→「バックアップ」で保存しておき、新しいスマホで「復元」してください。</li>
+    </ul>
+    <p class="hint" id="persistMsg"></p>
+    <p class="hint">バージョン：<span id="appVer"></span></p>
+    <button type="button" class="btn ghost" id="helpBack">戻る</button>
+  </div>
+</section>
+</main>
+
+<nav class="tabs">
+  <button type="button" data-v="v-input" class="on"><span class="ic">✏️</span>入力</button>
+  <button type="button" data-v="v-list"><span class="ic">📅</span>一覧</button>
+  <button type="button" data-v="v-sum"><span class="ic">📈</span>集計・出力</button>
+</nav>
+<div class="toast" id="toast"></div>
+<div class="update" id="updateBar" hidden><span>新しいバージョンがあります</span><button type="button" class="later" id="updLater">あとで</button><button type="button" class="go" id="updGo">更新する</button></div>
+<div id="printArea"></div>
+
+<script>
+(function(){
+'use strict';
+var KEY='kinmu-records-v1';
+var WD=['日','月','火','水','木','金','土'];
+var $=function(id){return document.getElementById(id)};
+var recs=load();
+var editId=null;
+var curMonth=ym(new Date());
+
+/* ---------- 保存 ---------- */
+function load(){try{var a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(recs))}
+
+/* ---------- ユーティリティ ---------- */
+function pad(n){return (n<10?'0':'')+n}
+function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function ym(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)}
+function toMin(t){if(!t)return null;var p=t.split(':');return (+p[0])*60+(+p[1])}
+function hm(min){min=Math.round(min||0);var s=min<0?'-':'';min=Math.abs(min);return s+Math.floor(min/60)+':'+pad(min%60)}
+function dec(min){return (Math.round((min||0)/60*100)/100).toFixed(2)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function wday(ds){var p=ds.split('-');return new Date(+p[0],p[1]-1,+p[2]).getDay()}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove('show')},2200)}
+function jpMonth(m){var p=m.split('-');return p[0]+'年'+(+p[1])+'月'}
+
+/* 実働計算：終了が開始より前なら日付をまたいだ勤務（夜勤）として扱う */
+function calc(start,end,brk){
+  var s=toMin(start),e=toMin(end);brk=Math.max(0,parseInt(brk,10)||0);
+  if(s==null||e==null)return {ok:false,msg:''};
+  var night=false;
+  if(e<=s){e+=1440;night=true}
+  var span=e-s;
+  if(brk>=span)return {ok:false,msg:'休憩が勤務時間以上です'};
+  return {ok:true,span:span,work:span-brk,night:night};
+}
+function workOf(r){var c=calc(r.start,r.end,r.brk);return c.ok?c.work:0}
+function nightOf(r){var c=calc(r.start,r.end,r.brk);return c.ok&&c.night}
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('nav.tabs button').forEach(function(b){
+  b.addEventListener('click',function(){showView(b.dataset.v)});
+});
+function showView(v){
+  document.querySelectorAll('.view').forEach(function(s){s.classList.toggle('on',s.id===v)});
+  document.querySelectorAll('nav.tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v)});
+  window.scrollTo(0,0);render();
+}
+
+/* ---------- 入力フォーム ---------- */
+var cond='普通';
+document.querySelectorAll('#cond button').forEach(function(b){
+  b.addEventListener('click',function(){setCond(b.dataset.v)});
+});
+function setCond(v){cond=v;document.querySelectorAll('#cond button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v)})}
+function lastRec(){return recs.slice().sort(function(a,b){return (b.updated||0)-(a.updated||0)})[0]}
+function resetForm(){
+  editId=null;
+  $('f').reset();
+  $('date').value=ymd(new Date());
+  var l=lastRec();
+  $('start').value=l?l.start:'09:00';
+  $('end').value=l?l.end:'18:00';
+  $('brk').value=l?l.brk:60;
+  $('count').value=0;
+  $('site').value='';
+  setCond('普通');
+  $('formTitle').textContent='勤務を記録する';
+  $('editBadge').hidden=true;$('cancelBtn').hidden=true;
+  $('saveBtn').textContent='保存する';
+  $('formCard').classList.remove('editing');
+  updCalc();
+}
+function updCalc(){
+  var c=calc($('start').value,$('end').value,$('brk').value);
+  var box=$('calc');
+  if(!c.ok){box.classList.add('err');$('calcVal').textContent=c.msg||'--:--';$('calcNote').textContent='';return}
+  box.classList.remove('err');
+  $('calcVal').textContent=hm(c.work);
+  $('calcNote').textContent=dec(c.work)+' 時間'+(c.night?'（翌日まで）':'');
+}
+['start','end','brk'].forEach(function(id){$(id).addEventListener('input',updCalc)});
+$('f').addEventListener('submit',function(ev){
+  ev.preventDefault();
+  var c=calc($('start').value,$('end').value,$('brk').value);
+  if(!$('date').value){toast('日付を入力してください');return}
+  if(!$('site').value.trim()){toast('現場名を入力してください');$('site').focus();return}
+  if(!c.ok){toast(c.msg||'時刻を入力してください');return}
+  var r={
+    id:editId||uid(),date:$('date').value,site:$('site').value.trim(),
+    start:$('start').value,end:$('end').value,
+    brk:Math.max(0,parseInt($('brk').value,10)||0),
+    count:Math.max(0,parseInt($('count').value,10)||0),
+    cond:cond,memo:$('memo').value.trim(),updated:Date.now()
+  };
+  if(editId){var i=recs.findIndex(function(x){return x.id===editId});if(i>=0)recs[i]=r;else recs.push(r);toast('更新しました')}
+  else{recs.push(r);toast('保存しました（実働 '+hm(c.work)+'）')}
+  persist();
+  curMonth=r.date.slice(0,7);
+  var wasEdit=!!editId;
+  resetForm();renderSites();
+  if(wasEdit)showView('v-list');
+});
+$('cancelBtn').addEventListener('click',function(){resetForm();showView('v-list')});
+
+function startEdit(id){
+  var r=recs.find(function(x){return x.id===id});if(!r)return;
+  showView('v-input');
+  editId=id;
+  $('date').value=r.date;$('site').value=r.site;$('start').value=r.start;$('end').value=r.end;
+  $('brk').value=r.brk;$('count').value=r.count;$('memo').value=r.memo||'';setCond(r.cond||'普通');
+  $('formTitle').textContent='記録を編集';$('editBadge').hidden=false;$('cancelBtn').hidden=false;
+  $('saveBtn').textContent='変更を保存';$('formCard').classList.add('editing');
+  updCalc();
+}
+function del(id){
+  var r=recs.find(function(x){return x.id===id});if(!r)return;
+  if(!confirm(r.date+'「'+r.site+'」の記録を削除しますか？\nこの操作は元に戻せません。'))return;
+  recs=recs.filter(function(x){return x.id!==id});persist();render();renderSites();toast('削除しました');
+}
+
+function renderSites(){
+  var seen={},list=[];
+  recs.slice().sort(function(a,b){return (b.updated||0)-(a.updated||0)}).forEach(function(r){if(!seen[r.site]){seen[r.site]=1;list.push(r.site)}});
+  $('siteList').innerHTML=list.map(function(s){return '<option value="'+esc(s)+'">'}).join('');
+}
+
+/* ---------- 月選択 ---------- */
+document.querySelectorAll('.mpick').forEach(function(i){i.addEventListener('change',function(){if(i.value){curMonth=i.value;render()}})});
+function shiftMonth(n){var p=curMonth.split('-');curMonth=ym(new Date(+p[0],p[1]-1+n,1));render()}
+document.querySelectorAll('.mprev').forEach(function(b){b.addEventListener('click',function(){shiftMonth(-1)})});
+document.querySelectorAll('.mnext').forEach(function(b){b.addEventListener('click',function(){shiftMonth(1)})});
+
+function monthRecs(m){
+  return recs.filter(function(r){return r.date.slice(0,7)===m}).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:(a.start<b.start?-1:a.start>b.start?1:0)});
+}
+function summary(m){
+  var rs=monthRecs(m),days={},total=0,cnt=0,sites={},order=[],conds={'良好':0,'普通':0,'不調':0};
+  rs.forEach(function(r){
+    var w=workOf(r);days[r.date]=1;total+=w;cnt+=r.count||0;
+    if(!sites[r.site]){sites[r.site]={site:r.site,days:{},work:0,count:0};order.push(r.site)}
+    var s=sites[r.site];s.days[r.date]=1;s.work+=w;s.count+=r.count||0;
+    if(conds[r.cond]!=null)conds[r.cond]++;
+  });
+  var nd=Object.keys(days).length;
+  return {recs:rs,days:nd,total:total,count:cnt,avg:nd?total/nd:0,conds:conds,
+    sites:order.map(function(k){var s=sites[k];return {site:s.site,days:Object.keys(s.days).length,work:s.work,count:s.count}}).sort(function(a,b){return b.work-a.work})};
+}
+
+/* ---------- 描画 ---------- */
+function render(){
+  document.querySelectorAll('.mpick').forEach(function(i){i.value=curMonth});
+  var S=summary(curMonth);
+  // 一覧
+  $('listCount').textContent=S.recs.length+'件';
+  $('list').innerHTML=S.recs.length?S.recs.map(function(r){
+    var w=wday(r.date),c=calc(r.start,r.end,r.brk);
+    return '<div class="rec"><div class="d'+(w===0?' sun':w===6?' sat':'')+'">'+(+r.date.slice(8))+'日<small>'+WD[w]+'</small></div>'+
+      '<div class="b"><div class="site">'+esc(r.site)+'<span class="tag '+esc(r.cond)+'">'+esc(r.cond)+'</span>'+(c.night?'<span class="tag night">翌日まで</span>':'')+'</div>'+
+      '<div class="meta">'+r.start+'〜'+(c.night?'翌':'')+r.end+'・休憩'+r.brk+'分</div>'+
+      '<div class="meta">実働 <b style="color:var(--txt)">'+hm(workOf(r))+'</b>（'+dec(workOf(r))+'h）・'+(r.count||0)+'件</div>'+
+      (r.memo?'<div class="memo">'+esc(r.memo)+'</div>':'')+'</div>'+
+      '<div class="acts"><button type="button" data-edit="'+r.id+'">編集</button><button type="button" class="del" data-del="'+r.id+'">削除</button></div></div>';
+  }).join(''):'<div class="empty">この月の記録はありません</div>';
+  // 集計
+  $('sumTitle').textContent=jpMonth(curMonth)+'の集計';
+  $('sDays').innerHTML=S.days+'<small>日</small>';
+  $('sHours').textContent=hm(S.total);$('sHoursDec').textContent=dec(S.total)+' 時間';
+  $('sCount').innerHTML=S.count+'<small>件</small>';
+  $('sAvg').textContent=hm(S.avg);$('sAvgDec').textContent=dec(S.avg)+' 時間';
+  $('sCond').textContent=S.recs.length?('体調：良好 '+S.conds['良好']+'回・普通 '+S.conds['普通']+'回・不調 '+S.conds['不調']+'回'):'';
+  $('siteTable').innerHTML=S.sites.length?siteTableHTML(S):'<div class="empty">データがありません</div>';
+}
+function siteTableHTML(S){
+  return '<table><thead><tr><th>現場名</th><th>日数</th><th>実働</th><th>件数</th></tr></thead><tbody>'+
+    S.sites.map(function(s){return '<tr><td>'+esc(s.site)+'</td><td>'+s.days+'日</td><td>'+hm(s.work)+'<br><small style="color:var(--sub)">'+dec(s.work)+'h</small></td><td>'+s.count+'</td></tr>'}).join('')+
+    '</tbody><tfoot><tr><td>合計</td><td>'+S.days+'日</td><td>'+hm(S.total)+'</td><td>'+S.count+'</td></tr></tfoot></table>';
+}
+$('list').addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b)return;
+  if(b.dataset.edit)startEdit(b.dataset.edit);
+  if(b.dataset.del)del(b.dataset.del);
+});
+
+/* ---------- 印刷用表示 ---------- */
+$('printBtn').addEventListener('click',function(){
+  var S=summary(curMonth);
+  if(!S.recs.length){toast('この月の記録がありません');return}
+  var h='<h1>'+jpMonth(curMonth)+' 勤務記録</h1>'+
+    '<div class="pstats"><div>出勤日数<b>'+S.days+' 日</b></div><div>総実働時間<b>'+hm(S.total)+'</b>（'+dec(S.total)+'時間）</div><div>総件数<b>'+S.count+' 件</b></div><div>平均実働/日<b>'+hm(S.avg)+'</b>（'+dec(S.avg)+'時間）</div></div>'+
+    '<h2>現場別</h2><table><thead><tr><th>現場名</th><th>日数</th><th>実働時間</th><th>実働(時間)</th><th>件数</th></tr></thead><tbody>'+
+    S.sites.map(function(s){return '<tr><td>'+esc(s.site)+'</td><td>'+s.days+'</td><td>'+hm(s.work)+'</td><td>'+dec(s.work)+'</td><td>'+s.count+'</td></tr>'}).join('')+
+    '</tbody><tfoot><tr><td>合計</td><td>'+S.days+'</td><td>'+hm(S.total)+'</td><td>'+dec(S.total)+'</td><td>'+S.count+'</td></tr></tfoot></table>'+
+    '<h2>明細</h2><table class="dt"><thead><tr><th>日付</th><th>現場名</th><th>開始</th><th>終了</th><th>休憩</th><th>実働</th><th>件数</th><th>体調</th><th style="text-align:left">メモ</th></tr></thead><tbody>'+
+    S.recs.map(function(r){var c=calc(r.start,r.end,r.brk);return '<tr><td>'+(+r.date.slice(5,7))+'/'+(+r.date.slice(8))+'('+WD[wday(r.date)]+')</td><td>'+esc(r.site)+'</td><td>'+r.start+'</td><td>'+(c.night?'翌':'')+r.end+'</td><td>'+r.brk+'分</td><td>'+hm(workOf(r))+'</td><td>'+(r.count||0)+'</td><td>'+esc(r.cond)+'</td><td style="text-align:left">'+esc(r.memo)+'</td></tr>'}).join('')+
+    '</tbody></table><div class="foot">作成日：'+ymd(new Date()).replace(/-/g,'/')+'</div>';
+  $('printArea').innerHTML=h;
+  window.print();
+});
+
+/* ---------- Excel出力 ---------- */
+function libReady(){return typeof window.ExcelJS!=='undefined'}
+function updLib(){$('libStatus').textContent=libReady()?'':'※Excel用ライブラリを読み込めていないため、CSV形式で出力します（Excelで開けます）。'}
+window.addEventListener('load',updLib);
+
+$('xlsxBtn').addEventListener('click',function(){
+  var S=summary(curMonth);
+  if(!S.recs.length){toast('この月の記録がありません');return}
+  if(libReady()){exportXlsx(S).catch(function(e){console.error(e);toast('Excel出力に失敗したためCSVで出力します');exportCsv(S)})}
+  else exportCsv(S);
+});
+
+function download(blob,name){
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500);
+}
+
+function exportXlsx(S){
+  var wb=new ExcelJS.Workbook();wb.creator='勤務記録';wb.created=new Date();
+  var title=jpMonth(curMonth)+' 勤務記録';
+  var thin={style:'thin',color:{argb:'FFBFBFBF'}};
+  var border={top:thin,left:thin,bottom:thin,right:thin};
+  var headFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDCE6F5'}};
+  var totFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};
+  var font='游ゴシック';
+  function styleHead(row){row.eachCell(function(c){c.font={name:font,bold:true,size:11};c.fill=headFill;c.border=border;c.alignment={horizontal:'center',vertical:'middle',wrapText:true}});row.height=22}
+  function styleBody(row){row.eachCell({includeEmpty:true},function(c){c.border=border;c.font={name:font,size:11};c.alignment=Object.assign({vertical:'middle'},c.alignment||{})})}
+
+  /* シート1：明細 */
+  var ws=wb.addWorksheet('明細',{views:[{state:'frozen',ySplit:3}],pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
+  ws.columns=[{key:'date',width:12},{key:'wd',width:6},{key:'site',width:22},{key:'start',width:8},{key:'end',width:10},{key:'brk',width:10},{key:'work',width:10},{key:'workh',width:10},{key:'count',width:8},{key:'cond',width:8},{key:'memo',width:36}];
+  ws.mergeCells('A1:K1');
+  var t=ws.getCell('A1');t.value=title;t.font={name:font,bold:true,size:16};t.alignment={vertical:'middle'};ws.getRow(1).height=30;
+  ws.getRow(2).height=6;
+  var hr=ws.getRow(3);hr.values=['日付','曜日','現場名','開始','終了','休憩(分)','実働','実働(時間)','件数','体調','メモ'];styleHead(hr);
+  S.recs.forEach(function(r){
+    var p=r.date.split('-'),c=calc(r.start,r.end,r.brk),w=workOf(r);
+    var row=ws.addRow([new Date(Date.UTC(+p[0],p[1]-1,+p[2])),WD[wday(r.date)],r.site,r.start,(c.night?'翌':'')+r.end,r.brk,w/1440,Math.round(w/60*100)/100,r.count||0,r.cond,r.memo||'']);
+    styleBody(row);
+    row.getCell(1).numFmt='yyyy/mm/dd';
+    [2,4,5,10].forEach(function(i){row.getCell(i).alignment={horizontal:'center',vertical:'middle'}});
+    row.getCell(7).numFmt='[h]:mm';row.getCell(8).numFmt='0.00';row.getCell(6).numFmt='0';row.getCell(9).numFmt='0';
+    row.getCell(11).alignment={wrapText:true,vertical:'middle'};
+    var wdn=wday(r.date);if(wdn===0)row.getCell(2).font={name:font,color:{argb:'FFC00000'}};if(wdn===6)row.getCell(2).font={name:font,color:{argb:'FF1F4E9E'}};
+  });
+  var first=4,last=3+S.recs.length;
+  var tr=ws.addRow(['合計','',S.days+'日','','',
+    {formula:'SUM(F'+first+':F'+last+')',result:S.recs.reduce(function(a,r){return a+r.brk},0)},
+    {formula:'SUM(G'+first+':G'+last+')',result:S.total/1440},
+    {formula:'SUM(H'+first+':H'+last+')',result:Math.round(S.total/60*100)/100},
+    {formula:'SUM(I'+first+':I'+last+')',result:S.count},'','']);
+  styleBody(tr);
+  tr.eachCell({includeEmpty:true},function(c){c.font={name:font,bold:true,size:11};c.fill=totFill;c.border={top:{style:'double',color:{argb:'FF000000'}},left:thin,bottom:thin,right:thin}});
+  tr.getCell(7).numFmt='[h]:mm';tr.getCell(8).numFmt='0.00';tr.getCell(3).alignment={horizontal:'center'};
+  ws.autoFilter={from:'A3',to:'K'+last};
+
+  /* シート2：集計 */
+  var ss=wb.addWorksheet('集計',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0}});
+  ss.columns=[{width:22},{width:12},{width:14},{width:14},{width:10}];
+  ss.mergeCells('A1:E1');
+  var t2=ss.getCell('A1');t2.value=title+'（集計）';t2.font={name:font,bold:true,size:16};ss.getRow(1).height=30;
+  var h1=ss.getRow(3);h1.values=['項目','値'];styleHead(h1);
+  var items=[['出勤日数',S.days,'0"日"'],['総実働時間',S.total/1440,'[h]:mm'],['総実働（時間）',Math.round(S.total/60*100)/100,'0.00"時間"'],['総件数',S.count,'0"件"'],['平均実働時間 / 日',S.avg/1440,'[h]:mm'],['平均実働（時間）/ 日',Math.round(S.avg/60*100)/100,'0.00"時間"'],['体調（良好/普通/不調）','良好 '+S.conds['良好']+' / 普通 '+S.conds['普通']+' / 不調 '+S.conds['不調'],null]];
+  items.forEach(function(it){var r=ss.addRow([it[0],it[1]]);styleBody(r);r.getCell(1).font={name:font,bold:true};r.getCell(1).fill=totFill;if(it[2])r.getCell(2).numFmt=it[2];r.getCell(2).alignment={horizontal:'right',vertical:'middle'}});
+  ss.mergeCells('B'+ss.lastRow.number+':E'+ss.lastRow.number);
+  ss.addRow([]);
+  var st=ss.addRow(['現場別']);st.getCell(1).font={name:font,bold:true,size:13};st.height=22;
+  var h2=ss.addRow(['現場名','日数','実働','実働(時間)','件数']);styleHead(h2);
+  S.sites.forEach(function(s){var r=ss.addRow([s.site,s.days,s.work/1440,Math.round(s.work/60*100)/100,s.count]);styleBody(r);r.getCell(2).numFmt='0"日"';r.getCell(3).numFmt='[h]:mm';r.getCell(4).numFmt='0.00';r.getCell(5).numFmt='0'});
+  var st2=ss.addRow(['合計',S.days,S.total/1440,Math.round(S.total/60*100)/100,S.count]);styleBody(st2);
+  st2.eachCell(function(c){c.font={name:font,bold:true};c.fill=totFill;c.border={top:{style:'double',color:{argb:'FF000000'}},left:thin,bottom:thin,right:thin}});
+  st2.getCell(2).numFmt='0"日"';st2.getCell(3).numFmt='[h]:mm';st2.getCell(4).numFmt='0.00';
+  ss.addRow([]);
+  var note=ss.addRow(['作成日：'+ymd(new Date()).replace(/-/g,'/')]);note.getCell(1).font={name:font,size:9,color:{argb:'FF808080'}};
+
+  return wb.xlsx.writeBuffer().then(function(buf){
+    download(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'勤務記録_'+curMonth+'.xlsx');
+    toast('Excelファイルを出力しました');
+  });
+}
+
+function csvCell(v){v=String(v==null?'':v);return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function exportCsv(S){
+  var L=[];
+  L.push([jpMonth(curMonth)+' 勤務記録']);L.push([]);
+  L.push(['日付','曜日','現場名','開始','終了','休憩(分)','実働','実働(時間)','件数','体調','メモ']);
+  S.recs.forEach(function(r){var c=calc(r.start,r.end,r.brk),w=workOf(r);L.push([r.date.replace(/-/g,'/'),WD[wday(r.date)],r.site,r.start,(c.night?'翌':'')+r.end,r.brk,hm(w),dec(w),r.count||0,r.cond,r.memo||''])});
+  L.push(['合計','',S.days+'日','','',S.recs.reduce(function(a,r){return a+r.brk},0),hm(S.total),dec(S.total),S.count,'','']);
+  L.push([]);L.push(['集計']);
+  L.push(['出勤日数',S.days]);L.push(['総実働時間',hm(S.total),dec(S.total)+'時間']);L.push(['総件数',S.count]);L.push(['平均実働時間/日',hm(S.avg),dec(S.avg)+'時間']);
+  L.push([]);L.push(['現場名','日数','実働','実働(時間)','件数']);
+  S.sites.forEach(function(s){L.push([s.site,s.days,hm(s.work),dec(s.work),s.count])});
+  var csv='\uFEFF'+L.map(function(r){return r.map(csvCell).join(',')}).join('\r\n');
+  download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'勤務記録_'+curMonth+'.csv');
+  toast('CSVファイルを出力しました');
+}
+
+/* ---------- バックアップ ---------- */
+$('expBtn').addEventListener('click',function(){
+  var data={app:'kinmu-kiroku',version:1,exported:new Date().toISOString(),records:recs};
+  download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'勤務記録_バックアップ_'+ymd(new Date())+'.json');
+  toast('バックアップを保存しました（'+recs.length+'件）');
+});
+$('impBtn').addEventListener('click',function(){$('impFile').value='';$('impFile').click()});
+$('impFile').addEventListener('change',function(){
+  var f=this.files[0];if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result),arr=Array.isArray(d)?d:d.records;
+      if(!Array.isArray(arr))throw new Error('形式が違います');
+      var ok=arr.filter(function(r){return r&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&r.start&&r.end&&typeof r.site==='string'}).map(function(r){
+        return {id:r.id||uid(),date:r.date,site:r.site,start:r.start,end:r.end,brk:+r.brk||0,count:+r.count||0,cond:r.cond||'普通',memo:r.memo||'',updated:r.updated||Date.now()};
+      });
+      if(!ok.length)throw new Error('有効な記録がありません');
+      var mode=confirm(ok.length+'件の記録が見つかりました。\n\n［OK］今のデータに追加（同じ記録は上書き）\n［キャンセル］読み込みを中止');
+      if(!mode)return;
+      var map={};recs.forEach(function(r){map[r.id]=r});ok.forEach(function(r){map[r.id]=r});
+      recs=Object.keys(map).map(function(k){return map[k]});persist();renderSites();render();
+      toast(ok.length+'件を読み込みました');
+    }catch(e){alert('読み込めませんでした：'+e.message)}
+  };
+  rd.readAsText(f);
+});
+
+/* ---------- 使い方・インストール ---------- */
+var APP_VERSION='1.0.0';
+$('appVer').textContent=APP_VERSION;
+var prevView='v-input';
+$('helpBtn').addEventListener('click',function(){
+  var cur=document.querySelector('.view.on');
+  if(cur&&cur.id==='v-help'){showView(prevView);return}
+  prevView=cur?cur.id:'v-input';showView('v-help');
+});
+$('helpBack').addEventListener('click',function(){showView(prevView)});
+function isStandalone(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true}
+if(isStandalone())$('standaloneMsg').hidden=false;
+var deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e;$('installBtn').hidden=false});
+$('installBtn').addEventListener('click',function(){
+  if(!deferredPrompt)return;deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(){deferredPrompt=null;$('installBtn').hidden=true});
+});
+window.addEventListener('appinstalled',function(){$('installBtn').hidden=true;toast('ホーム画面に追加しました')});
+
+/* データが自動で消されにくくする（対応ブラウザのみ） */
+if(navigator.storage&&navigator.storage.persist){
+  navigator.storage.persisted().then(function(p){return p||navigator.storage.persist()}).then(function(p){
+    $('persistMsg').textContent=p?'✅ データ保護：このブラウザに「消さないでほしいデータ」として登録済みです。':'ℹ️ データ保護の登録はまだです（ホーム画面に追加すると登録されやすくなります）。';
+  }).catch(function(){});
+}
+
+/* ---------- オフライン対応（Service Worker）と更新のお知らせ ---------- */
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
+  var refreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(refreshing)return;refreshing=true;location.reload()});
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){
+      function showUpdate(w){
+        $('updateBar').hidden=false;
+        $('updGo').onclick=function(){w.postMessage({type:'SKIP_WAITING'})};
+        $('updLater').onclick=function(){$('updateBar').hidden=true};
+      }
+      if(reg.waiting&&navigator.serviceWorker.controller)showUpdate(reg.waiting);
+      reg.addEventListener('updatefound',function(){
+        var w=reg.installing;if(!w)return;
+        w.addEventListener('statechange',function(){if(w.state==='installed'&&navigator.serviceWorker.controller)showUpdate(w)});
+      });
+      // アプリを開き直したときに更新を確認
+      document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')reg.update().catch(function(){})});
+    }).catch(function(e){console.warn('SW登録失敗',e)});
+  });
+}
+
+/* ---------- 初期化 ---------- */
+resetForm();renderSites();render();
+})();
+</script>
+</body>
+</html>
